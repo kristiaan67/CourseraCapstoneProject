@@ -21,7 +21,7 @@ saveCorpus <- function(corpus, pattern) {
 
 loadCorpus <- function(pattern) {
     corpus <- VCorpus(DirSource(output_dir, pattern = pattern), 
-                      readerControl = list(reader = readPlain, language = "eng"))
+                      readerControl = list(reader = readPlain, language = LOCALE))
     print(paste("Loaded corpus from ", output_dir, "/", names(corpus), sep = ""))
     
     for (idx in 1:length(corpus)) {
@@ -35,4 +35,3 @@ loadCorpus <- function(pattern) {
 corpusExists <- function(pattern) {
     file.exists(paste(output_dir, "/", pattern, corpus_file, sep = ""))
 }
-

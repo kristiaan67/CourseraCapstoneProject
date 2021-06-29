@@ -74,7 +74,7 @@ if (!corpusExists("final_")) {
         }
         
         corpus <- VCorpus(DirSource(input_dir), 
-                          readerControl = list(reader = readPlain, language = "eng"))
+                          readerControl = list(reader = readPlain, language = LOCALE))
         print(inspect(corpus))
         
         print("Initial corpus created, cleaning and prepairing data...")
@@ -186,6 +186,3 @@ if (!corpusExists("final_")) {
 } else {
     print("Corpus already cleaned and prepaired!")    
 }
-
-
-

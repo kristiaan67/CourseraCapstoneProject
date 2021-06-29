@@ -9,6 +9,7 @@ if (!corpusExists("final_")) {
 ## Task 3: Model Data
 ######################
 
+library(data.table)
 library(ngram)
 
 corpus <- loadCorpus("final_")
@@ -18,10 +19,9 @@ corpus <- loadCorpus("final_")
 text <- concatenate(sapply(corpus, function(c) concatenate(c$content), USE.NAMES = FALSE))
 
 ng2 <- ngram(text, n = 2)
-pt2 <- get.phrasetable(ng2)
+pt2 <- as.data.table(get.phrasetable(ng2))
 print(head(pt2, n = 25))
 
 ng3 <- ngram(text, n = 3)
-pt3 <- get.phrasetable(ng3)
+pt3 <- as.data.table(get.phrasetable(ng3))
 print(head(pt3, n = 25))
-

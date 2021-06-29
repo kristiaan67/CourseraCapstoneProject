@@ -9,6 +9,7 @@ if (!corpusExists("final_")) {
 ## Task 2: Exploratory Data Analysis
 #####################################
 
+library(data.table)
 library(dplyr)
 library(ggplot2)
 library(wordcloud2)
@@ -21,7 +22,7 @@ dtm <- TermDocumentMatrix(corpus)
 print(findFreqTerms(dtm, lowfreq = 100))
 
 word_matrix <- sort(rowSums(as.matrix(dtm)), decreasing = TRUE)
-word_data <- data.frame(word = names(word_matrix), freq = word_matrix)
+word_data <- data.table(word = names(word_matrix), freq = word_matrix)
 print(head(word_data, 25))
 
 # distribution of word frequencies
@@ -49,11 +50,12 @@ for (coverage in c(0.5, 0.75, 0.9, .95)) {
     freqs <- c(freqs, num_words)
     percents <- c(percents, num_words * 100 / tot_words)
 }
-cover_data <- data.frame(coverage = c(0.5, 0.75, 0.9, .95), 
+cover_data <- data.table(coverage = c(0.5, 0.75, 0.9, .95), 
                          num_words = freqs, 
                          percents = percents,
                          min_freq = word_data$freq[freqs])
 print(cover_data)
+
 p <- ggplot(cover_data, 
             aes(x = paste(format(coverage * 100, digits = 0, nsmall = 0), "%", sep = ""), y = num_words)) + 
     theme_bw() + theme(legend.position = "none", 
@@ -85,7 +87,7 @@ p <- ggplot(main_word_data[1:top_words,], aes(x = factor(word, levels = word), y
                        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
                        axis.title.x = element_blank(), axis.text.y = element_blank()) + 
     geom_col(fill = "dodgerblue") + 
-    geom_text(aes(label = paste(format(freq / 1000, digits = 0, nsmall = 0), "K", sep = "")), nudge_y = 3000) + 
+    geom_text(aes(label = paste(format(freq / 1000, digits = 0, nsmall = 0), "K", sep = "")), nudge_y = 4000) + 
     labs(title = paste("Top", top_words, "Words")) + ylab("Frequency")
 print(p)
 
@@ -106,6 +108,6 @@ p <- ggplot(word_freqs, aes(x = factor(bin, levels = c("[0, 500]", "[501, 1000]"
                        panel.grid.major = element_blank(), 
                        panel.grid.minor = element_blank()) +
     geom_col(fill = "dodgerblue") +
-    geom_text(aes(label = counts), nudge_y = 20) +
+    geom_text(aes(label = counts), nudge_y = 25) +
     labs(title = "Distribution of Word Frequency") + xlab("Frequency") + ylab("Number of Words")
 print(p)
