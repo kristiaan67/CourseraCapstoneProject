@@ -1,0 +1,5 @@
+final/
+output/
+*.zip
+bad-words.txt
+wrong-words.txt
