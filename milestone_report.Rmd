@@ -1,0 +1,289 @@
+---
+title: "Cleaning and Analyzing Text"
+author: "Kristiaan De Jongh"
+date: "7/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Abstract
+
+This report describes the data cleaning, preparation and analysis process of the
+data set used to develop a word prediction app. The app is developed in context of 
+the capstone project of [the Data Science Specialization course on Coursera](https://www.coursera.org/specializations/jhu-data-science).
+
+It will be shown that only a small subset of the corpus is relevant to cover the 
+word instances of the corpus.
+
+## Data Set
+
+The data set used can be downloaded [here](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip) and
+consists of 3 text files collected from publicly available sources by a web crawler.
+After unzipping the data set, the (English) text files can be found under *final/en_US*.
+
+```{r libs, message=FALSE}
+library(tm)
+library(data.table)
+library(ggplot2)
+library(wordcloud2)
+library(ngram)
+```
+
+A quick analysis of the text files (number of word, lines and characters):
+
+```
+wc -l -w -c final/en_US/*.txt
+  899288 37334690 210160014 en_US.blogs.txt
+ 1010242 34372720 205811889 en_US.news.txt
+ 2360148 30374206 167105338 en_US.twitter.txt
+ 4269678 102081616 583077241 total
+```
+
+The data set is loaded with the [tm package](https://cran.r-project.org/web/packages/tm/tm.pdf) 
+and the result is a *Corpus* with 3 text documents:
+
+```{r init, eval=FALSE}
+corpus <- VCorpus(DirSource('final/en_US'), 
+                  readerControl = list(reader = readPlain, language = 'en_US'))
+```
+
+## Data Cleanup
+
+The text files are cleaned in several steps:
+
+1. Base: Remove punctuation, special words (URLs, email addresses, tags, ...), white space, stop words,  
+2. Spell checking: Remove incorrectly spelled and non-English words
+3. Stemming: Reducing inflected words to their word stem
+4. Blacklist Remove profane words
+
+The goals are to reduce the size of the data and to aggregate the content for 
+better analysis.
+
+Since the execution of the cleanup takes several hours, it will not be performed 
+when this report is generated. The complete R code can be found [here on GitHub](https://github.com/kristiaan67/CourseraCapstoneProject) and reproduced.
+
+### Base Cleanup
+
+Steps:
+1. Transform character encoding to 'latin1' to remove special characters
+2. Convert all characters to lowercase
+3. Remove URLs, email addresses and tags
+4. Remove word and character repeats
+5. Remove punctuation and some special characters
+6. Remove numbers
+7. Remove stop words
+
+```{r basecleanup, eval=FALSE}
+corpus <- tm_map(corpus, content_transformer(function(x) iconv(x, to = "latin1", sub = "")))
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, content_transformer(removeInternetStuff))
+corpus <- tm_map(corpus, content_transformer(removeRepeats))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, content_transformer(replaceSpecialChars))
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords(language = 'en_US'))
+```
+
+### Spell Checking
+
+Using the [hungspell package](https://cran.r-project.org/web/packages/hunspell/hunspell.pdf)
+each sentence is checked and all words that are incorrectly spelled (or are not English) 
+are collected and the removed from the corpus.
+
+```{r spellchecking, eval=FALSE}
+wrong_words <- c()
+for (c in 1:length(corpus)) {
+    wrong_words <- unique(c(wrong_words, unlist(hunspell(corpus[[c]]$content))))
+}
+corpus <- tm_map(corpus, removeWords, wrong_words)
+```
+
+### Stemming
+
+First the white spaces are stripped and then the corpus is stemmed:
+
+```{r stemming, eval=FALSE}
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, stemDocument)
+```
+
+### Blacklist
+
+A blacklist with profane words is downloaded https://www.cs.cmu.edu/~biglou/resources/bad-words.txt
+and these bad words are removed from the corpus.
+
+```{r blacklist, eval=FALSE}
+download.file("https://www.cs.cmu.edu/~biglou/resources/bad-words.txt",
+              destfile = "bad-words.txt", method = "curl")
+bad_words <- readLines("bad-words.txt")
+corpus <- tm_map(corpus, removeWords, bad_words)
+```
+
+Finally the cleaned corpus is saved to *output/en_US* (with file name prefix 'final_').
+
+```{r save, eval=FALSE}
+file_names <- sapply(corpus, function(x) paste("final_", x$meta[["id"]], sep = ""), USE.NAMES = FALSE)
+writeCorpus(corpus, path = 'output/en_US', filenames = file_names)
+```
+
+## Data Analysis
+
+Another quick analysis of the cleaned text files (number of word, lines and characters):
+
+```
+wc -l -w -c output/en_US/final_*.txt
+  899288 16856521 101415920 final_en_US.blogs.txt
+ 1010242 16329079 101001090 final_en_US.news.txt
+ 2360148 14046755 79423805 final_en_US.twitter.txt
+ 4269678 47232355 281840815 total
+```
+
+After the cleanup the total number of words was reduced by 54% (102.081.616 -> 47.232.355 words).
+For further analysis the corpus is re-loaded:
+
+```{r loadfinal, cache=TRUE}
+corpus <- VCorpus(DirSource('output/en_US', pattern = "final_"), 
+                  readerControl = list(reader = readPlain, language = 'en_US'))
+```
+
+### Word Frequency
+
+First the occurrences of words in the corpus is analyzed:
+
+```{r wordfreqs, cache=TRUE}
+corpusDTM <- TermDocumentMatrix(corpus)
+word_matrix <- sort(rowSums(as.matrix(corpusDTM)), decreasing = TRUE)
+word_data <- data.table(word = names(word_matrix), freq = word_matrix)
+```
+
+The top-20 words being:
+
+```{r, out.width="100%"}
+top_words <- 20
+ggplot(word_data[1:top_words,], aes(x = factor(word, levels = word), y = freq)) + 
+    theme_bw() + theme(legend.position = "none", 
+                       panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                       axis.title.x = element_blank(), axis.text.y = element_blank()) + 
+    geom_col(fill = "dodgerblue") + 
+    geom_text(aes(label = format(freq / 1000, digits = 0, nsmall = 0)), nudge_y = 6000) + 
+    labs(title = paste("Top", top_words, "Words"), subtitle = "(in thousands)") + ylab("Frequency")
+```
+
+or more fun
+
+```{r, out.width="100%"}
+wordcloud2(data = word_data)
+```
+
+The distribution of the word frequency seems to show that a lot of words occur less than 
+500 times whereas a minority of words covers most of the corpus, an assumption that
+will be analyzed next.
+
+```{r wordfreqdist, cache=TRUE}
+word_freqs <- word_data %>% mutate(
+    bin = ifelse(freq > 20000, "[20001,)",
+                 ifelse(freq > 10000, "[10001,20000]",
+                        ifelse(freq > 5000, "[5001,1 10000]",
+                               ifelse(freq > 2500, "[2501, 5000]",
+                                      ifelse(freq > 1000, "[1001, 2500]",
+                                             ifelse(freq > 500, "[501, 1000]", "[1, 500]"))))))) %>%
+    group_by(bin) %>%
+    summarise(counts = n())
+```
+
+```{r, out.width="100%"}
+ggplot(word_freqs, aes(x = factor(bin, levels = c("[1, 500]", "[501, 1000]", "[1001, 2500]", "[2501, 5000]", "[5001,1 10000]", "[10001,20000]", "[20001,)")), 
+                            y = counts)) + 
+    theme_bw() + theme(legend.position = "none", 
+                       panel.grid.major = element_blank(), 
+                       panel.grid.minor = element_blank()) +
+    geom_col(fill = "dodgerblue") +
+    geom_text(aes(label = counts), nudge_y = 500) +
+    labs(title = "Distribution of Word Frequency") + xlab("Frequency") + ylab("Number of Words")
+```
+
+### Corpus Coverage
+
+Next it is analyzed how many words are needed to cover a specific percentage of the whole corpus.
+This is checked for a coverage of 50%, 75%, 90% and 95%:
+
+```{r wordcoverage, cache=TRUE}
+tot_words <- nrow(word_data)
+tot_freq_words <- sum(word_data$freq)
+freqs <- c()
+percents <- c()
+for (coverage in c(0.5, 0.75, 0.9, 0.95)) {
+    freq_words <- 0
+    num_words <- 0
+    while (freq_words < tot_freq_words * coverage) {
+        num_words <- num_words + 1
+        freq_words <- freq_words + word_data$freq[num_words]
+    }
+    freqs <- c(freqs, num_words)
+    percents <- c(percents, num_words * 100 / tot_words)
+}
+cover_data <- data.table(coverage = c(0.5, 0.75, 0.9, 0.95), 
+                         num_words = freqs, 
+                         percents = percents,
+                         min_freq = word_data$freq[freqs])
+```
+
+```{r, comment="", out.width="100%"}
+cover_data
+ggplot(cover_data, 
+       aes(x = paste(format(coverage * 100, digits = 0, nsmall = 0), "%", sep = ""), 
+           y = num_words)) + 
+    theme_bw() + theme(legend.position = "none", 
+                       panel.grid.major = element_blank(), 
+                       panel.grid.minor = element_blank()) + 
+    geom_col(fill = "dodgerblue") + 
+    geom_text(aes(label = paste(num_words, " (", format(percents, digits = 1, nsmall = 1), "%)", sep = "")),
+              nudge_y = 150) + 
+    labs(title = "Word Coverage") + xlab("Coverage (%)") + ylab("Number of Words")
+```
+
+It is very interesting to see that to cover 90% of all word instances, only 3394 words
+(11.4%) are relevant needed (and to cover 95% 5635 words or 18.9%). 
+
+This information will allow us the reduce the data set for the prediction model!
+We will (only) use the `r max(cover_data$num_words)` words that cover 95% of the corpus.
+
+```{r mainwords, cache=TRUE}
+main_word_data <- word_data[1:max(cover_data$num_words),]
+```
+
+## Next Steps
+
+The corpus was cleaned and the words that will be used to build the prediction model
+were identified. So far so good :>)
+
+To predict words following a specific word the context of words in a sentence needs
+to be analzyed, i.e. which words follow on wich words.
+
+In order to do that 2- and 3-grams of the corpus are built from the concatenation 
+of all the sentences of the 3 documents in the corpus:
+
+```{r ngrams, cache=TRUE}
+text <- concatenate(sapply(corpus, function(c) concatenate(c$content), USE.NAMES = FALSE))
+
+ng2 <- ngram(text, n = 2)
+pt2 <- as.data.table(get.phrasetable(ng2))
+
+ng3 <- ngram(text, n = 3)
+pt3 <- as.data.table(get.phrasetable(ng3))
+```
+
+The top-10 of most occurring 2-word phrases:
+
+```{r, comment=""}
+head(pt2, n = 10)
+```
+
+The top-10 of most occurring 3-word phrases:
+
+```{r, comment=""}
+head(pt3, n = 10)
+```

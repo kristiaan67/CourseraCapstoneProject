@@ -3,7 +3,6 @@ library(tm)
 
 ## CONSTANTS
 
-LANG <- 'en'
 LOCALE <- 'en_US'
 
 input_dir <- paste('final/', LOCALE, sep = "")

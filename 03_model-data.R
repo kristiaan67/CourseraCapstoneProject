@@ -1,16 +1,18 @@
 
-source('00_commons.R', echo = FALSE)
-if (!corpusExists("final_")) {
-    source('01_prepare-data.R', echo = FALSE)
-    stopifnot(corpusExists("final_"))
-}
-
 ######################
 ## Task 3: Model Data
 ######################
 
 library(data.table)
 library(ngram)
+
+source('00_commons.R', echo = FALSE)
+if (!corpusExists("final_")) {
+    source('01_prepare-data.R', echo = FALSE)
+    stopifnot(corpusExists("final_"))
+}
+
+## START
 
 corpus <- loadCorpus("final_")
 

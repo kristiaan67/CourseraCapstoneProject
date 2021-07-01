@@ -1,10 +1,4 @@
 
-source('00_commons.R', echo = FALSE)
-if (!corpusExists("final_")) {
-    source('01_prepare-data.R', echo = FALSE)
-    stopifnot(corpusExists("final_"))
-}
-
 #####################################
 ## Task 2: Exploratory Data Analysis
 #####################################
@@ -14,14 +8,22 @@ library(dplyr)
 library(ggplot2)
 library(wordcloud2)
 
+source('00_commons.R', echo = FALSE)
+if (!corpusExists("final_")) {
+    source('01_prepare-data.R', echo = FALSE)
+    stopifnot(corpusExists("final_"))
+}
+
+## START
+
 corpus <- loadCorpus("final_")
 
 # 1. Some words are more frequent than others - what are the distributions of word frequencies? 
 
-dtm <- TermDocumentMatrix(corpus)
-print(findFreqTerms(dtm, lowfreq = 100))
+corpusDTM <- TermDocumentMatrix(corpus)
+print(findFreqTerms(corpusDTM, lowfreq = 1000))
 
-word_matrix <- sort(rowSums(as.matrix(dtm)), decreasing = TRUE)
+word_matrix <- sort(rowSums(as.matrix(corpusDTM)), decreasing = TRUE)
 word_data <- data.table(word = names(word_matrix), freq = word_matrix)
 print(head(word_data, 25))
 
