@@ -1,5 +1,6 @@
 final/
 output/
+rsconnect/
 *.zip
 bad-words.txt
 wrong-words.txt
