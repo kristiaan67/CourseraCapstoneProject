@@ -30,9 +30,10 @@ removeRepeats <- function(x) {
 
 expandAbbreviations <- function(x) {
     gsub("´ll", " will", 
-         gsub("´re", " are", 
-              gsub("´ve", " have", 
-                   gsub("´t", " not", x))))
+         gsub("´m", " am", 
+              gsub("´re", " are", 
+                   gsub("´ve", " have", 
+                        gsub("´t", " not", x)))))
 }
 
 replaceSpecialChars <- function(x) {
