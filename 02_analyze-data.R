@@ -8,9 +8,9 @@ library(dplyr)
 library(ggplot2)
 library(wordcloud2)
 
-source('00_commons.R', echo = FALSE)
+source('project/00_commons.R', echo = FALSE)
 if (!corpusExists("final_")) {
-    source('01_prepare-data.R', echo = FALSE)
+    source('project/01_prepare-data.R', echo = FALSE)
     stopifnot(corpusExists("final_"))
 }
 
@@ -108,6 +108,8 @@ p <- ggplot(word_freqs, aes(x = factor(bin, levels = c("[0, 500]", "[501, 1000]"
                        panel.grid.major = element_blank(), 
                        panel.grid.minor = element_blank()) +
     geom_col(fill = "dodgerblue") +
-    geom_text(aes(label = sprintf("%d (%.1f%%)", counts, counts*100/tot_words)), nudge_y = 500) +
+    geom_text(aes(label = sprintf("%d (%.1f%%)", counts, counts*100/tot_words)), nudge_y = 20) +
     labs(title = "Distribution of Word Frequency") + xlab("Frequency") + ylab("Number of Words")
 print(p)
+
+fwrite(main_word_data, file = paste(output_dir, "/main_word_data.csv", sep = ""))

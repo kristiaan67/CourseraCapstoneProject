@@ -1,12 +1,14 @@
 
 library(tm)
+library(qdapRegex)
 
 ## CONSTANTS
 
+LANG <- "en"
 LOCALE <- 'en_US'
 
-input_dir <- paste('final/', LOCALE, sep = "")
-output_dir <- paste('output/', LOCALE, sep = "")
+input_dir <- paste('project/final/', LOCALE, sep = "")
+output_dir <- paste('project/output/', LOCALE, sep = "")
 corpus_file <- paste(LOCALE, ".blogs.txt", sep = "")
 
 
@@ -33,4 +35,37 @@ loadCorpus <- function(pattern) {
 
 corpusExists <- function(pattern) {
     file.exists(paste(output_dir, "/", pattern, corpus_file, sep = ""))
+}
+
+
+removeInternetStuff <- function(x) {
+    rm_tag(
+        rm_email(
+            rm_url(x, trim = FALSE, clean = FALSE), 
+            trim = FALSE, clean = FALSE), 
+        trim = FALSE, clean = FALSE)
+}
+
+removeRepeats <- function(x) {
+    rm_repeated_words(
+        rm_repeated_characters(x, trim = FALSE, clean = FALSE), 
+        trim = FALSE, clean = FALSE)
+}
+
+removeRedundantWhitespace <- function(x) {
+    str_trim(stripWhitespace(x))
+}
+
+splitWords <- function(x) {
+    str_split(str_trim(x), "\\s", simplify = TRUE)
+}
+
+sliceVector <- function(v, n) {
+    res <- list()
+    idx <- 1
+    while (idx <= length(v)) {
+        res[[(idx %/% n) + 1]] <- v[idx:min(idx+n-1, length(v))]
+        idx <- idx + n
+    }
+    return(res)
 }

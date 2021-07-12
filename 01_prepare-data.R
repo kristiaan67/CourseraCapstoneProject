@@ -3,55 +3,14 @@
 ## Task 1: Getting and Cleaning the Data
 #########################################
 
-library(qdapRegex)
+library(stringr)
 library(hunspell)
 
-source('00_commons.R', echo = FALSE)
+source('project/00_commons.R', echo = FALSE)
 
 # 1. Tokenization - identifying appropriate tokens such as words, punctuation, and numbers. 
 #    Writing a function that takes a file as input and returns a tokenized version of it.
 # 2. Profanity filtering - removing profanity and other words you do not want to predict.
-
-## FUNCTIONS
-
-removeInternetStuff <- function(x) {
-    rm_tag(
-        rm_email(
-            rm_url(x, trim = FALSE, clean = FALSE), 
-            trim = FALSE, clean = FALSE), 
-        trim = FALSE, clean = FALSE)
-}
-
-removeRepeats <- function(x) {
-    rm_repeated_words(
-        rm_repeated_characters(x, trim = FALSE, clean = FALSE), 
-        trim = FALSE, clean = FALSE)
-}
-
-expandAbbreviations <- function(x) {
-    gsub("´ll", " will", 
-         gsub("´m", " am", 
-              gsub("´re", " are", 
-                   gsub("´ve", " have", 
-                        gsub("´t", " not", x)))))
-}
-
-replaceSpecialChars <- function(x) {
-    gsub("\\s+$", "", 
-         gsub("^\\s+", "", 
-              gsub("[-–_ˆ“”‘’°…¬″′•♥■★»ª]", " ", x)))
-}
-
-sliceVector <- function(v, n) {
-    res <- list()
-    idx <- 1
-    while (idx <= length(v)) {
-        res[[(idx %/% n) + 1]] <- v[idx:min(idx+n-1, length(v))]
-        idx <- idx + n
-    }
-    return(res)
-}
-
 
 ## START
 
@@ -69,7 +28,7 @@ if (!file.exists("Coursera-SwiftKey.zip")) {
 }
 
 dictionary(LOCALE)
-    
+
 ## 1. Clean Data
 if (corpusExists("base_")) {
     corpus <- loadCorpus("base_")
@@ -94,10 +53,6 @@ if (corpusExists("base_")) {
     corpus <- tm_map(corpus, content_transformer(removeRepeats))
     print("    - removing punctuation...")
     corpus <- tm_map(corpus, removePunctuation)
-    print("    - expanding abbreviations...")
-    corpus <- tm_map(corpus, content_transformer(expandAbbreviations))
-    print("    - replacing special chars...")
-    corpus <- tm_map(corpus, content_transformer(replaceSpecialChars))
     print("    - removing numbers...")
     corpus <- tm_map(corpus, removeNumbers)
     print("    - removing stopwords...")
@@ -106,22 +61,23 @@ if (corpusExists("base_")) {
     # save base result
     saveCorpus(corpus, "base_")
 }
-    
+
 if (corpusExists("wrong_")) {
     corpus <- loadCorpus("wrong_")
     
 } else {
     print("    - removing wrongly spelled or foreign words...")
-    if (!file.exists("wrong-words.txt")) {
+    wrong_words_file <- paste(output_dir, "/wrong-words.txt", sep = "")
+    if (!file.exists(wrong_words_file)) {
         wrong_words <- c()
         for (c in 1:length(corpus)) {
             wrong_words <- unique(c(wrong_words, unlist(hunspell(corpus[[c]]$content))))
         }
-        writeLines(sort(wrong_words), "wrong-words.txt")
+        writeLines(sort(wrong_words), wrong_words_file)
         print("         * generated wrongly spelled or foreign words")
         
     } else {
-        wrong_words <- readLines("wrong-words.txt")
+        wrong_words <- readLines(wrong_words_file)
         print("         * loaded wrongly spelled or foreign words")
     }
     
@@ -158,7 +114,7 @@ if (corpusExists("stem_")) {
     
 } else {
     print("    - stripping whitespace...")
-    corpus <- tm_map(corpus, stripWhitespace)
+    corpus <- tm_map(corpus, content_transformer(removeRedundantWhitespace))
     print("    - stemming...")
     corpus <- tm_map(corpus, stemDocument)
     
