@@ -21,10 +21,10 @@ corpus <- loadCorpus("final_")
 # 1. Some words are more frequent than others - what are the distributions of word frequencies? 
 
 corpusDTM <- TermDocumentMatrix(corpus)
-print(findFreqTerms(corpusDTM, lowfreq = 1000))
-
 word_matrix <- sort(rowSums(as.matrix(corpusDTM)), decreasing = TRUE)
 word_data <- data.table(word = names(word_matrix), freq = word_matrix)
+# filter stop words from word data
+word_data <- word_data[!(word %in% stemDocument(stopwords(LANG))),]
 print(head(word_data, 25))
 
 # distribution of word frequencies
@@ -33,6 +33,10 @@ print(summary(word_data$freq))
 tot_words <- nrow(word_data)
 tot_freq_words <- sum(word_data$freq)
 print(sprintf("Corpus has %d unique words and %d in total", tot_words, tot_freq_words))
+
+# word cloud
+set.seed(1234)
+wordcloud2(data = word_data)
 
 # How many unique words do you need in a frequency sorted dictionary to cover 
 # 50% of all word instances in the language? 90%?
@@ -62,7 +66,7 @@ p <- ggplot(cover_data,
                        panel.grid.major = element_blank(), 
                        panel.grid.minor = element_blank()) + 
     geom_col(fill = "dodgerblue") + 
-    geom_text(aes(label = sprintf("%d (%.1f%%)", num_words, percents)), nudge_y = 100) + 
+    geom_text(aes(label = sprintf("%d (%.1f%%)", num_words, percents)), nudge_y = 125) + 
     labs(title = "Word Coverage") + xlab("Coverage (%)") + ylab("Number of Words")
 print(p)
 
@@ -75,10 +79,7 @@ print(p)
 # - So we could remove all words that are not within the coverage or occur less than for example 500 times.
 
 main_word_data <- word_data[1:max(cover_data$num_words),]
-
-# word cloud
-set.seed(1234)
-wordcloud2(data = main_word_data)
+fwrite(main_word_data, file = paste(output_dir, "/main_word_data.csv", sep = ""))
 
 # top words
 top_words <- 20
@@ -99,6 +100,7 @@ main_word_data <- main_word_data %>%
                                       ifelse(freq > 2500, "[2501, 5000]",
                                              ifelse(freq > 1000, "[1001, 2500]",
                                                     ifelse(freq > 500, "[501, 1000]", "[0, 500]")))))))
+
 word_freqs <- group_by(main_word_data, bin) %>%
     summarise(counts = n())
 
@@ -108,8 +110,6 @@ p <- ggplot(word_freqs, aes(x = factor(bin, levels = c("[0, 500]", "[501, 1000]"
                        panel.grid.major = element_blank(), 
                        panel.grid.minor = element_blank()) +
     geom_col(fill = "dodgerblue") +
-    geom_text(aes(label = sprintf("%d (%.1f%%)", counts, counts*100/tot_words)), nudge_y = 20) +
+    geom_text(aes(label = sprintf("%d (%.1f%%)", counts, counts*100/tot_words)), nudge_y = 30) +
     labs(title = "Distribution of Word Frequency") + xlab("Frequency") + ylab("Number of Words")
 print(p)
-
-fwrite(main_word_data, file = paste(output_dir, "/main_word_data.csv", sep = ""))

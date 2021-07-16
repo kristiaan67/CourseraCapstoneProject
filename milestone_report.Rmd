@@ -86,7 +86,7 @@ corpus <- tm_map(corpus, content_transformer(removeRepeats))
 corpus <- tm_map(corpus, removePunctuation)
 corpus <- tm_map(corpus, content_transformer(replaceSpecialChars))
 corpus <- tm_map(corpus, removeNumbers)
-corpus <- tm_map(corpus, removeWords, stopwords(language = 'en_US'))
+corpus <- tm_map(corpus, removeWords, stopwords('en'))
 ```
 
 ### Spell Checking

@@ -12,7 +12,7 @@ source('project/00_commons.R', echo = FALSE)
 ## CONSTANTS
 
 # the maximum number of words in a phrase for which an n-gram is generated
-MAX_NGRAM <- 3
+MAX_NGRAM <- 4
 LOOKUP_FILE <- paste(output_dir, "/lookup_table.csv", sep = "")
 MAIN_WORDS_FILE <- paste(output_dir, "/main_word_data.csv", sep = "")
 
@@ -46,7 +46,8 @@ createLookupTable <- function(corpus, main_word_data) {
     lookup_table <- data.table(context = character(), prediction = character(), 
                                freq = numeric(), prop = numeric(), ngram = numeric())
     setindex(lookup_table, "context")
-
+    setindex(lookup_table, "prediction")
+    
     for (n in 2:MAX_NGRAM) {
         # generate n-gram phrase tables
         print(paste("Generating ", n, "-gram phrase table...", sep = ""))
@@ -59,6 +60,9 @@ createLookupTable <- function(corpus, main_word_data) {
             lookup_table <- rbind(lookup_table, 
                                   cbind(context = contexts, prediction = predictions, 
                                         freq = pt$freq, prop = pt$prop, ngram = n))
+            # filter out the entries of which the only word of the context is not a main word
+            lookup_table <- lookup_table[context %in% main_word_data$word]
+
         } else {
             lookup_table <- rbind(lookup_table, 
                                   cbind(context = apply(contexts, 1, createContext),
@@ -68,6 +72,9 @@ createLookupTable <- function(corpus, main_word_data) {
         # only use the phrases of which the last word (the prediction) is part of the main words coverage
         lookup_table <- lookup_table[prediction %in% main_word_data$word]
         
+        fwrite(lookup_table, file = LOOKUP_FILE)
+        print(paste("Saved lookup table to", LOOKUP_FILE))
+
         rm(pt, wt, contexts, predictions)
     }
     rm(text)
@@ -79,7 +86,8 @@ lookup_table <- NULL
 if (file.exists(LOOKUP_FILE)) {
     lookup_table <- fread(LOOKUP_FILE, colClasses = c(character(), character(), numeric(), numeric(), numeric()))
     setindex(lookup_table, "context")
-
+    setindex(lookup_table, "prediction")
+    
 } else {
     if (!corpusExists("final_")) {
         source('01_prepare-data.R', echo = FALSE)
@@ -91,11 +99,8 @@ if (file.exists(LOOKUP_FILE)) {
     main_word_data = fread(MAIN_WORDS_FILE)
     
     lookup_table <- createLookupTable(corpus, main_word_data)
-    fwrite(lookup_table, file = LOOKUP_FILE)
-    print(paste("Saved lookup table to", LOOKUP_FILE))
     rm(corpus, main_word_data)
 }
-print(str(lookup_table))
 print(head(lookup_table))
 
 # Lookup Process:
@@ -108,32 +113,52 @@ print(head(lookup_table))
 #  - return the list of predictions
 
 cleanPhrase <- function(phrase) {
-    clean_phrase <- stemDocument(
+    return(stemDocument(
         removeRedundantWhitespace(
-            removeWords(
+            expandAbbreviations(
                 removeNumbers(
                     removePunctuation(
                         removeRepeats(
                             removeInternetStuff(
                                 str_to_lower(
-                                    iconv(phrase, to = "latin1", sub = "")))))), 
-                stopwords(LANG))))
-    return(clean_phrase)
+                                    iconv(phrase, to = "ASCII", sub = ""))))))))))
 }
 
 predictNextWords <- function(phrase) {
     res <- NULL
     lookup_words <- splitWords(cleanPhrase(phrase))
     for (n in (MAX_NGRAM - 1):1) {
-        c <- createContext(lookup_words[(length(lookup_words) - n + 1):length(lookup_words)])
-        if (is.null(res)) {
-            res <- lookup_table[context == c]
-        } else {
-            res <- rbind(res, lookup_table[context == c])
+        if (n <= length(lookup_words)) {
+            c <- createContext(lookup_words[(length(lookup_words) - n + 1):length(lookup_words)])
+            if (is.null(res)) {
+                res <- lookup_table[context == c]
+            } else {
+                res <- rbind(res, lookup_table[context == c])
+            }
         }
     }
     
     setorder(res, -ngram, -freq)
     return(res)
+}
+
+findBestPrediction <- function(phrase, preds) {
+    results <- NULL
+    predictions <- predictNextWords(phrase)
+    for (pred in preds) {
+        res <- predictions[prediction == cleanPhrase(pred)]
+        if (nrow(res) > 0) {
+            if (is.null(results)) {
+                results <- res[1]
+            } else {
+                results <- rbind(results, res[1])
+            }
+        }
+    }
+    
+    if (is.null(results)) {
+        return(NULL)
+    }
+    return(results[order(-ngram, -freq)][1])
 }
 

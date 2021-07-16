@@ -21,10 +21,10 @@ if (corpusExists("final_")) {
 
 print("Loading and cleaning data...")
 
-if (!file.exists("Coursera-SwiftKey.zip")) {
+if (!file.exists("project/Coursera-SwiftKey.zip")) {
     download.file("https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip",
-                  destfile = "Coursera-SwiftKey.zip", method = "curl")
-    unzip("Coursera-SwiftKey.zip")
+                  destfile = "project/Coursera-SwiftKey.zip", method = "curl")
+    unzip("project/Coursera-SwiftKey.zip")
 }
 
 dictionary(LOCALE)
@@ -44,7 +44,7 @@ if (corpusExists("base_")) {
     
     print("Initial corpus created, cleaning and prepairing data...")
     print("    - transforming to 'latin1'...")
-    corpus <- tm_map(corpus, content_transformer(function(x) iconv(x, to = "latin1", sub = "")))
+    corpus <- tm_map(corpus, content_transformer(function(x) iconv(x, to = "ASCII", sub = "")))
     print("    - transforming to lowercase...")
     corpus <- tm_map(corpus, content_transformer(tolower))
     print("    - removing internet stuff...")
@@ -55,8 +55,10 @@ if (corpusExists("base_")) {
     corpus <- tm_map(corpus, removePunctuation)
     print("    - removing numbers...")
     corpus <- tm_map(corpus, removeNumbers)
-    print("    - removing stopwords...")
-    corpus <- tm_map(corpus, removeWords, stopwords(language = LOCALE))
+    print("    - expanding abbreviations...")
+    corpus <- tm_map(corpus, content_transformer(expandAbbreviations))
+#    print("    - removing stopwords...")
+#    corpus <- tm_map(corpus, removeWords, stopwords(LANG))
     
     # save base result
     saveCorpus(corpus, "base_")
@@ -93,8 +95,9 @@ if (corpusExists("wrong_")) {
     
     count <- 1
     saved_tmp_file_count <- loaded_tmp_file_count
-    num_batch <- 100
-    for (batch in sliceVector(wrong_words, 1000)) {
+    num_batch <- 100 # after every 'batch' a temp corpus is written
+    num_words_batch <- 1000 # the number of words that is processed in 1 batch
+    for (batch in sliceVector(wrong_words, num_words_batch)) {
         if (count > loaded_tmp_file_count * num_batch) {
             corpus <- tm_map(corpus, removeWords, batch)
             print(paste("         * removed batch of wrong words:", count))
@@ -107,14 +110,13 @@ if (corpusExists("wrong_")) {
     }
     
     saveCorpus(corpus, "wrong_")
+    rm(wrong_words)
 }
 
 if (corpusExists("stem_")) {
     corpus <- loadCorpus("stem_")
     
 } else {
-    print("    - stripping whitespace...")
-    corpus <- tm_map(corpus, content_transformer(removeRedundantWhitespace))
     print("    - stemming...")
     corpus <- tm_map(corpus, stemDocument)
     
@@ -127,12 +129,12 @@ if (corpusExists("profane_")) {
     
 } else {
     print("Data cleaned, filtering profane words...")
-    if (!file.exists("bad-words.txt")) {
+    if (!file.exists("project/bad-words.txt")) {
         # see https://www.cs.cmu.edu/~biglou/resources/bad-words.txt
         download.file("https://www.cs.cmu.edu/~biglou/resources/bad-words.txt",
-                      destfile = "bad-words.txt", method = "curl")
+                      destfile = "project/bad-words.txt", method = "curl")
     }
-    bad_words <- readLines("bad-words.txt")
+    bad_words <- readLines("project/bad-words.txt")
     count <- 1
     for (batch in sliceVector(bad_words, 1500)) {
         corpus <- tm_map(corpus, removeWords, batch)
@@ -140,7 +142,11 @@ if (corpusExists("profane_")) {
         count <- count + 1
     }
     
+    print("    - stripping whitespace...")
+    corpus <- tm_map(corpus, content_transformer(removeRedundantWhitespace))
+
     saveCorpus(corpus, "profane_")
+    rm(bad_words)
 }
 
 saveCorpus(corpus, "final_")
