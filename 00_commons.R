@@ -1,6 +1,7 @@
 
 library(tm)
 library(qdapRegex)
+library(stringr)
 
 ## CONSTANTS
 
@@ -11,8 +12,11 @@ input_dir <- paste('project/final/', LOCALE, sep = "")
 output_dir <- paste('project/output/', LOCALE, sep = "")
 corpus_file <- paste(LOCALE, ".blogs.txt", sep = "")
 
+set.seed(1234)
 
 ## FUNCTIONS
+
+# CORPUS STUFF
 
 saveCorpus <- function(corpus, pattern) {
     file_names <- sapply(corpus, function(x) paste(pattern, x$meta[["id"]], sep = ""), USE.NAMES = FALSE)
@@ -38,79 +42,48 @@ corpusExists <- function(pattern) {
 }
 
 
+# DATA CLEANING STUFF
+
 removeInternetStuff <- function(x) {
-    rm_tag(
-        rm_email(
-            rm_url(x, trim = FALSE, clean = FALSE), 
-            trim = FALSE, clean = FALSE), 
-        trim = FALSE, clean = FALSE)
+    rm_tag(rm_email(rm_url(x)))
 }
 
 removeRepeats <- function(x) {
-    rm_repeated_words(
-        rm_repeated_characters(x, trim = FALSE, clean = FALSE), 
-        trim = FALSE, clean = FALSE)
-}
-
-expandAbbreviations <- function(x) {
-    res <- str_replace_all(x, "aren't", "are not")
-    res <- str_replace_all(res, "can't", "cannot")
-    res <- str_replace_all(res, "couldn't", "could not")
-    res <- str_replace_all(res, "didn't", "did not")
-    res <- str_replace_all(res, "doesn't", "does not")
-    res <- str_replace_all(res, "don't", "do not")
-    res <- str_replace_all(res, "hadn't", "had not")
-    res <- str_replace_all(res, "hasn't", "has not")
-    res <- str_replace_all(res, "haven't", "have not")
-    res <- str_replace_all(res, "he'd", "he had")
-    res <- str_replace_all(res, "he'll", "he will")
-    res <- str_replace_all(res, "he's", " he has")
-    res <- str_replace_all(res, "here's", "here is")
-    res <- str_replace_all(res, "how's", "how is")
-    res <- str_replace_all(res, "i'd", "i had")      
-    res <- str_replace_all(res, "i'll", "i will")
-    res <- str_replace_all(res, "i'm", "i am")
-    res <- str_replace_all(res, "i've", "i have")
-    res <- str_replace_all(res, "isn't", "is not")
-    res <- str_replace_all(res, "it's", "it is")
-    res <- str_replace_all(res, "let's", "let us")
-    res <- str_replace_all(res, "mustn't", "must not")
-    res <- str_replace_all(res, "shan't", "shall not")
-    res <- str_replace_all(res, "she'd", "she had")
-    res <- str_replace_all(res, "she'll", "she will")
-    res <- str_replace_all(res, "she's", "she has")
-    res <- str_replace_all(res, "shouldn't", "should not")
-    res <- str_replace_all(res, "that's", "that is")
-    res <- str_replace_all(res, "there's", "there is")
-    res <- str_replace_all(res, "they'd", "they had")
-    res <- str_replace_all(res, "they'll", "they will")
-    res <- str_replace_all(res, "they're", "they are")
-    res <- str_replace_all(res, "they've", "they have")
-    res <- str_replace_all(res, "wasn't", "was not")
-    res <- str_replace_all(res, "we'd", "we had")
-    res <- str_replace_all(res, "we'll", "we will")
-    res <- str_replace_all(res, "we're", "we are")
-    res <- str_replace_all(res, "we've", "we have")
-    res <- str_replace_all(res, "weren't", "were not")
-    res <- str_replace_all(res, "what's", "what is")
-    res <- str_replace_all(res, "when's", "when is")
-    res <- str_replace_all(res, "where's", "where is")
-    res <- str_replace_all(res, "who's", "who is")
-    res <- str_replace_all(res, "why's", "why is")
-    res <- str_replace_all(res, "won't", "will not")
-    res <- str_replace_all(res, "wouldn't", "would not")
-    res <- str_replace_all(res, "you'd", "you had")
-    res <- str_replace_all(res, "you'll", "you will")
-    res <- str_replace_all(res, "you're", "you are")
-    res <- str_replace_all(res, "you've", "you have")
+    rm_repeated_words(x)
 }
 
 removeRedundantWhitespace <- function(x) {
     str_trim(stripWhitespace(x))
 }
 
+# DATA ANALYSIS STUFF
+
+calculateCoverage <- function(thresholds, word_data_freq) {
+    tot_words <- length(word_data_freq)
+    tot_freq_words <- sum(word_data_freq)
+    cov_num_words <- c()
+    percents <- c()
+    for (coverage in thresholds) {
+        freq_words <- 0
+        num_words <- 0
+        while (freq_words < tot_freq_words * coverage) {
+            num_words <- num_words + 1
+            freq_words <- freq_words + word_data_freq[num_words]
+        }
+        cov_num_words <- c(cov_num_words, num_words)
+        percentage <- num_words * 100 / tot_words
+        percents <- c(percents, percentage)
+        print(sprintf("%d unique words (of %d words in dictionary) cover %d%% of all word frequencies in corpus, or %.1f%% of dictionary", 
+                      num_words, tot_words, coverage * 100, percentage))
+    }
+    return(data.table(coverage = thresholds, num_words = cov_num_words, 
+                      percentages = percents, min_freq = word_data_freq[cov_num_words]))
+}
+
+# UTIL STUFF
+
 splitWords <- function(x) {
-    str_split(str_trim(x), "\\s", simplify = TRUE)
+    str_split(str_trim(x), "\\s+", simplify = TRUE)
 }
 
 sliceVector <- function(v, n) {

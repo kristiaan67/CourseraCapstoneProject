@@ -3,162 +3,117 @@
 ## Task 3: Model Data
 ######################
 
+#########################
+# Input: main_word_data
+# Output: lookup_table
+########################
+
 library(data.table)
+library(dplyr)
 library(ngram)
 library(stringr)
 
 source('project/00_commons.R', echo = FALSE)
 
+stopifnot(corpusExists("final_"))
+
 ## CONSTANTS
 
 # the maximum number of words in a phrase for which an n-gram is generated
 MAX_NGRAM <- 4
-LOOKUP_FILE <- paste(output_dir, "/lookup_table.csv", sep = "")
-MAIN_WORDS_FILE <- paste(output_dir, "/main_word_data.csv", sep = "")
 
 ## START
 
 ## Algorithm
 
-# Data Model:
+## Data Model:
 #  - generate n-gram phrase tables
 #  - split the words of the phrases (the last word is the prediction in context of the words before)
 #  - only use the phrases of which the last word (the prediction) is part of the main words coverage
 #  - save the words and the probability of the phrase in a data table
 #  - create an index for each word column
 
-createContext <- function(words) {
-    context <- NULL
-    for (word in words) {
-        if (is.null(context)) {
-            context <- word
-        } else {
-            context <- sprintf("%s_%s", context, word)
-        }
-    }
-    return(context)
+lookupTableFileName <- function(n) {
+    paste(output_dir, "/", n, "-lookup_table.csv", sep = "")
 }
 
-createLookupTable <- function(corpus, main_word_data) {
-    # concatenate the documents of the corpus
-    text <- concatenate(sapply(corpus, function(c) concatenate(c$content), USE.NAMES = FALSE))
-    
-    lookup_table <- data.table(context = character(), prediction = character(), 
-                               freq = numeric(), prop = numeric(), ngram = numeric())
-    setindex(lookup_table, "context")
-    setindex(lookup_table, "prediction")
-    
-    for (n in 2:MAX_NGRAM) {
-        # generate n-gram phrase tables
-        print(paste("Generating ", n, "-gram phrase table...", sep = ""))
-        pt <- get.phrasetable(ngram(text, n = n))
-        # split the words of the phrases and create lookup table
-        wt <- splitWords(pt$ngrams)
-        contexts <- wt[,1:(n - 1)]
-        predictions <- wt[,n]
-        if (n == 2) {
-            lookup_table <- rbind(lookup_table, 
-                                  cbind(context = contexts, prediction = predictions, 
-                                        freq = pt$freq, prop = pt$prop, ngram = n))
-            # filter out the entries of which the only word of the context is not a main word
-            lookup_table <- lookup_table[context %in% main_word_data$word]
-
-        } else {
-            lookup_table <- rbind(lookup_table, 
-                                  cbind(context = apply(contexts, 1, createContext),
-                                        prediction = predictions, freq = pt$freq, 
-                                        prop = pt$prop, ngram = n))
+# Checks whether at least one word of the context is a main word.
+contextHasMainWord <- function(contexts, main_word_data) {
+    sapply(contexts, function(context) { 
+        for (word in splitWords(context)) {
+            if (word %in% main_word_data$word) {
+                return(TRUE)
+            }
         }
-        # only use the phrases of which the last word (the prediction) is part of the main words coverage
-        lookup_table <- lookup_table[prediction %in% main_word_data$word]
+        return(FALSE)
+    })
+}
+
+createCorpusNgramTable <- function(n, corpus, main_word_data) {
+    # generate n-gram phrase tables
+    print(paste("Generating ", n, "-gram phrase tables...", sep = ""))
+    
+    # collect all the sentences of the corpus 
+    # (filtering out sentences that have less than 'n' words)
+    phrases <- c()
+    for (idx in 1:length(corpus)) {
+        phrases <- c(phrases,
+                     corpus[[idx]]$content[sapply(corpus[[idx]]$content, 
+                                                  function(p) length(splitWords(p)) >= n, 
+                                                  USE.NAMES = FALSE)])
+    }
+    
+    pt <- as.data.table(get.phrasetable(ngram(phrases, n = n))) %>%
+        mutate(ngrams = str_trim(ngrams))
+    
+    ngram_table <- data.table(context = word(pt$ngrams, 1, -2), prediction = word(pt$ngrams, -1), 
+                              freq = pt$freq, prop = pt$prop, ngram = n)
+    setindex(ngram_table, "context")
+    setindex(ngram_table, "prediction")
+    if (n == 2) {
+        ngram_table <- ngram_table[(prediction %in% main_word_data$word) & 
+                                       (context %in% main_word_data$word)]
         
-        fwrite(lookup_table, file = LOOKUP_FILE)
-        print(paste("Saved lookup table to", LOOKUP_FILE))
-
-        rm(pt, wt, contexts, predictions)
+    } else {
+        ngram_table <- ngram_table[prediction %in% main_word_data$word & 
+                                       contextHasMainWord(context, main_word_data)]
     }
-    rm(text)
-    
-    return(lookup_table)
+
+    fwrite(ngram_table, file = lookupTableFileName(n))
+    print(paste("Saved ", n, "-gram lookup table: ", lookupTableFileName(n), sep = ""))
+
+    return(ngram_table)
 }
 
-lookup_table <- NULL
-if (file.exists(LOOKUP_FILE)) {
-    lookup_table <- fread(LOOKUP_FILE, colClasses = c(character(), character(), numeric(), numeric(), numeric()))
-    setindex(lookup_table, "context")
-    setindex(lookup_table, "prediction")
-    
-} else {
-    if (!corpusExists("final_")) {
-        source('01_prepare-data.R', echo = FALSE)
-        stopifnot(corpusExists("final_"))
-    }
+createLookupTables <- function() {
     corpus <- loadCorpus("final_")
     
-    stopifnot(file.exists(MAIN_WORDS_FILE))
-    main_word_data = fread(MAIN_WORDS_FILE)
-    
-    lookup_table <- createLookupTable(corpus, main_word_data)
-    rm(corpus, main_word_data)
-}
-print(head(lookup_table))
+    main_words_file <- paste(output_dir, "/main_word_data.csv", sep = "")
+    stopifnot(file.exists(main_words_file))
+    main_word_data = fread(main_words_file)
+    setkey(main_word_data, "word")
 
-# Lookup Process:
-#  - the input is a phrase consisting of 'n' words
-#  - clean and stem the input phrase (using the same steps used to clean the corpus)
-#  - split the input phrase and retrieve the last word
-#  - retrieve the records from the data model that have this word as 'n-1' word
-#  - if the input phrase consists of more than one word check for the other words in the context as well
-#  - if matches were found, sort first on the number of words in the match and second the probability 
-#  - return the list of predictions
+    lookup_tables <- list()
+    for (n in 2:MAX_NGRAM) {
+        ngram_table <- createCorpusNgramTable(n, corpus, main_word_data)
+        lookup_tables[[n - 1]] <- ngram_table
+    }
 
-cleanPhrase <- function(phrase) {
-    return(stemDocument(
-        removeRedundantWhitespace(
-            expandAbbreviations(
-                removeNumbers(
-                    removePunctuation(
-                        removeRepeats(
-                            removeInternetStuff(
-                                str_to_lower(
-                                    iconv(phrase, to = "ASCII", sub = ""))))))))))
+    return(lookup_tables)
 }
 
-predictNextWords <- function(phrase) {
-    res <- NULL
-    lookup_words <- splitWords(cleanPhrase(phrase))
-    for (n in (MAX_NGRAM - 1):1) {
-        if (n <= length(lookup_words)) {
-            c <- createContext(lookup_words[(length(lookup_words) - n + 1):length(lookup_words)])
-            if (is.null(res)) {
-                res <- lookup_table[context == c]
-            } else {
-                res <- rbind(res, lookup_table[context == c])
-            }
+loadLookupTables <- function() {
+    lookup_tables <- list()
+    for (n in 2:MAX_NGRAM) {
+        file_name <- lookupTableFileName(n)
+        if (file.exists(file_name)) {
+            ngram_table <- fread(file_name, colClasses = c(character(), character(), numeric(), numeric(), numeric()))
+            setindex(ngram_table, "context")
+            setindex(ngram_table, "prediction")
+            lookup_tables[[n - 1]] <- ngram_table
         }
-    }
+    }  
     
-    setorder(res, -ngram, -freq)
-    return(res)
-}
-
-findBestPrediction <- function(phrase, preds) {
-    results <- NULL
-    predictions <- predictNextWords(phrase)
-    for (pred in preds) {
-        res <- predictions[prediction == cleanPhrase(pred)]
-        if (nrow(res) > 0) {
-            if (is.null(results)) {
-                results <- res[1]
-            } else {
-                results <- rbind(results, res[1])
-            }
-        }
-    }
-    
-    if (is.null(results)) {
-        return(NULL)
-    }
-    return(results[order(-ngram, -freq)][1])
+    return(lookup_tables)      
 }
 
